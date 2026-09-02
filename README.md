@@ -1,0 +1,99 @@
+# TenantKiller
+
+TenantKiller answers one narrow question: **would your tests fail if a Django
+query accidentally lost its tenant scope?**
+
+It finds `tenant`, `organization`, `org`, and `company` keyword constraints in
+Django-style `.filter()` and `.get()` calls. It removes one constraint at a
+time in a fresh temporary project copy, runs your test command, and reports the
+mutant as:
+
+- `KILLED` — the tests failed and caught the missing scope;
+- `SURVIVED` — the tests still passed, exposing a tenant-isolation test gap;
+- `ERROR` — the test command timed out or could not run.
+
+TenantKiller never rewrites the target source tree. A passing baseline is
+required before any mutant is tested.
+
+## Install
+
+```bash
+python -m pip install -e .
+```
+
+Python 3.11 or newer is required. There are no runtime dependencies, and
+Django itself is not required for discovery.
+
+## Quickstart
+
+List mutations without running tests or changing files:
+
+```bash
+tenantkiller list examples/django_like
+```
+
+Run the bundled dependency-free example:
+
+```bash
+tenantkiller run examples/django_like -- python -m unittest discover -q
+```
+
+Expected result:
+
+```text
+Baseline passed (...s).
+KILLED   TK-...  app.py:9:27  remove tenant_id= from .filter()
+
+1 killed, 0 survived, 0 error(s); mutation score 100.0%
+```
+
+Use the same shape in a real project:
+
+```bash
+tenantkiller run . -- python -m pytest tests/tenancy -q
+```
+
+Add `--json` before the command separator for machine-readable output, and
+`--timeout SECONDS` to change the 120-second per-run limit.
+
+Exit codes are `0` when every mutant is killed, `1` when at least one survives,
+and `2` for baseline or execution errors.
+
+## Mutation operator in v0.1
+
+The only operator removes one scope keyword from a call whose method name is
+`filter` or `get`:
+
+```python
+# original
+Order.objects.filter(tenant_id=request.tenant_id, status="open")
+
+# temporary mutant
+Order.objects.filter(status="open")
+```
+
+Recognized roots are `tenant`, `organization`, `org`, and `company`, including
+`*_id` and Django lookup forms such as `organization__slug`.
+
+## Deliberate limitations
+
+- Detection is syntactic. TenantKiller does not yet prove that a receiver is a
+  Django queryset, so review `tenantkiller list` before a large run.
+- It does not cover `exclude`, `Q` objects, positional predicates, managers,
+  middleware, Celery, caches, storage paths, or frontend code.
+- A non-zero mutant test run is classified as killed; flaky tests can inflate
+  the score. Each run uses a fresh copy, but external databases and services
+  are not isolated by TenantKiller.
+- The temporary copy excludes common VCS, virtual-environment, cache, build,
+  and `node_modules` directories. Dependencies should already be installed in
+  the environment that invokes TenantKiller.
+
+These constraints are intentional: v0.1 validates the semantic mutation idea
+before expanding the operator set.
+
+## Development
+
+```bash
+python -m unittest discover -s tests -v
+```
+
