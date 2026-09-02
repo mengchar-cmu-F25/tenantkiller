@@ -7,7 +7,13 @@ import json
 import sys
 from pathlib import Path
 
-from .core import BaselineFailed, Mutation, discover_mutations, run_mutations
+from .core import (
+    BaselineFailed,
+    Mutation,
+    _validate_timeout,
+    discover_mutations,
+    run_mutations,
+)
 
 
 def _mutation_dict(mutation: Mutation) -> dict[str, object]:
@@ -68,9 +74,7 @@ def _run(args: argparse.Namespace) -> int:
     if not command:
         print("error: provide a test command after --", file=sys.stderr)
         return 2
-    if args.timeout <= 0:
-        print("error: --timeout must be greater than zero", file=sys.stderr)
-        return 2
+    timeout = _validate_timeout(args.timeout)
 
     mutations = discover_mutations(args.target)
     if not mutations:
@@ -84,7 +88,7 @@ def _run(args: argparse.Namespace) -> int:
         report = run_mutations(
             args.target,
             command,
-            timeout=args.timeout,
+            timeout=timeout,
             mutations=mutations,
         )
     except BaselineFailed as error:

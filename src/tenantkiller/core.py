@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import io
+import math
 import os
 import signal
 import shutil
@@ -112,6 +113,17 @@ class _CommandResult:
     timed_out: bool
     seconds: float
     diagnostic: str | None = None
+
+
+def _validate_timeout(timeout: float) -> float:
+    if (
+        isinstance(timeout, bool)
+        or not isinstance(timeout, (int, float))
+        or not math.isfinite(timeout)
+        or timeout <= 0
+    ):
+        raise ValueError("timeout must be a finite number greater than zero")
+    return float(timeout)
 
 
 def _scope_keyword(name: str | None) -> bool:
@@ -416,9 +428,14 @@ def _run_in_copy(
                 source = _contained_regular_file(root, mutation.relative_path)
                 destination = _contained_regular_file(workspace, mutation.relative_path)
                 mode = stat.S_IMODE(destination.stat().st_mode)
-                if not mode & stat.S_IWUSR:
+                made_writable = not mode & stat.S_IWUSR
+                if made_writable:
                     destination.chmod(mode | stat.S_IWUSR)
-                destination.write_bytes(_mutated_bytes(source, mutation))
+                try:
+                    destination.write_bytes(_mutated_bytes(source, mutation))
+                finally:
+                    if made_writable:
+                        destination.chmod(mode)
 
             environment = os.environ.copy()
             import_roots = [workspace]
@@ -451,6 +468,7 @@ def run_mutations(
 
     if not command:
         raise ValueError("test command cannot be empty")
+    timeout = _validate_timeout(timeout)
     root, _ = _project_root_and_files(Path(target))
     discovered = discover_mutations(target)
     if mutations is None:

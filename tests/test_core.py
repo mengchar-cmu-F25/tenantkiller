@@ -74,6 +74,19 @@ result = records.filter(
 
 
 class RunnerTests(unittest.TestCase):
+    def test_rejects_invalid_timeout_values(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            for timeout in (True, False, 0, -1, float("nan"), float("inf"), float("-inf"), "1"):
+                with self.subTest(timeout=timeout):
+                    with self.assertRaisesRegex(
+                        ValueError, "timeout must be a finite number greater than zero"
+                    ):
+                        run_mutations(
+                            directory,
+                            [sys.executable, "-c", "raise SystemExit(0)"],
+                            timeout=timeout,  # type: ignore[arg-type]
+                        )
+
     def test_kills_mutant_without_touching_source(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -226,6 +239,33 @@ class TestScope(unittest.TestCase):
             )
 
             self.assertEqual(report.results[0].status, "KILLED")
+            self.assertEqual(source.stat().st_mode & 0o777, 0o444)
+
+    def test_restores_read_only_mode_before_running_tests(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "app.py"
+            source.write_text(
+                "result = records.filter(company_id=company_id)\n",
+                encoding="utf-8",
+            )
+            source.chmod(0o444)
+            (root / "check_mode.py").write_text(
+                """\
+from pathlib import Path
+import stat
+raise SystemExit(0 if stat.S_IMODE(Path('app.py').stat().st_mode) == 0o444 else 91)
+""",
+                encoding="utf-8",
+            )
+
+            report = run_mutations(
+                root,
+                [sys.executable, "check_mode.py"],
+                timeout=15,
+            )
+
+            self.assertEqual(report.results[0].status, "SURVIVED")
             self.assertEqual(source.stat().st_mode & 0o777, 0o444)
 
     def test_reports_mutant_preparation_failure_as_error(self) -> None:

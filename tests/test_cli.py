@@ -41,6 +41,35 @@ class CliTests(unittest.TestCase):
             self.assertEqual(exit_code, 2)
             self.assertIn("could not start test command", error_output.getvalue())
 
+    def test_rejects_non_finite_and_non_positive_timeouts(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "app.py"
+            source.write_text(
+                "result = rows.get(tenant_id=tenant_id)\n",
+                encoding="utf-8",
+            )
+            for timeout in ("0", "-1", "nan", "inf", "-inf"):
+                with self.subTest(timeout=timeout):
+                    error_output = io.StringIO()
+                    with redirect_stderr(error_output):
+                        exit_code = main(
+                            [
+                                "run",
+                                f"--timeout={timeout}",
+                                directory,
+                                "--",
+                                "python",
+                                "-c",
+                                "raise SystemExit(0)",
+                            ]
+                        )
+
+                    self.assertEqual(exit_code, 2)
+                    self.assertIn(
+                        "timeout must be a finite number greater than zero",
+                        error_output.getvalue(),
+                    )
+
 
 if __name__ == "__main__":
     unittest.main()
