@@ -49,14 +49,14 @@ KILLED   TK-...  app.py:9:27  remove tenant_id= from .filter()
 1 killed, 0 survived, 0 error(s); mutation score 100.0%
 ```
 
-Use the same shape in a real project:
+Use the same shape in a real project (place run options before the target):
 
 ```bash
-tenantkiller run . -- python -m pytest tests/tenancy -q
+tenantkiller run --json . -- python -m pytest tests/tenancy -q
 ```
 
-Add `--json` before the command separator for machine-readable output, and
-`--timeout SECONDS` to change the 120-second per-run limit.
+`--json` emits machine-readable output, and `--timeout SECONDS` changes the
+120-second per-run limit. Both must appear before the target path.
 
 Exit codes are `0` when every mutant is killed, `1` when at least one survives,
 and `2` for baseline or execution errors.
@@ -98,6 +98,14 @@ Recognized roots are `tenant`, `organization`, `org`, and `company`, including
 
 These constraints are intentional: v0.1 validates the semantic mutation idea
 before expanding the operator set.
+
+## Product and real-world evidence
+
+- [One-page product definition](docs/PRODUCT.md)
+- [Pinned django-organizations observation](validation/django-organizations/README.md)
+  with fixed upstream and TenantKiller revisions
+- [Small real-repository corpus](validation/corpus/README.md), including the
+  negative evidence behind the current product hold
 
 ## Development
 

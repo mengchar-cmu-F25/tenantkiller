@@ -1,0 +1,33 @@
+{
+  "record_type": "recorded_observation",
+  "tenantkiller_revision": "3d4f20ee406685e03f85ecc6386893f9f0d12023",
+  "upstream": {
+    "repository": "bennylope/django-organizations",
+    "revision": "f8953c4ad568ee5ad5113a3a2aa762c0053bc273"
+  },
+  "environment": {
+    "python": "3.13.9",
+    "django": "6.0.6",
+    "pytest": "9.1.1"
+  },
+  "baseline": {
+    "passed": true,
+    "test": "tests/test_models.py::OrgModelTests::test_remove_user"
+  },
+  "mutation": {
+    "id": "TK-0CFF6996D8",
+    "path": "src/organizations/abstract.py",
+    "line": 128,
+    "operator": "get",
+    "keyword": "organization",
+    "edited_line": "org_user = self._org_user_model.objects.get(user=user)"
+  },
+  "observed_mutant": {
+    "classification": "KILLED",
+    "returncode": 1,
+    "exception": "organizations.models.OrganizationUser.MultipleObjectsReturned",
+    "message": "get() returned more than one OrganizationUser -- it returned 2!"
+  },
+  "source_checkout_clean_before_and_after": true,
+  "limitation": "This file records a manual observation; it does not verify itself or prove tenant isolation."
+}
