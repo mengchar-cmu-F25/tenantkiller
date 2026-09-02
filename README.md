@@ -10,9 +10,11 @@ mutant as:
 
 - `KILLED` — the tests failed and caught the missing scope;
 - `SURVIVED` — the tests still passed, exposing a tenant-isolation test gap;
-- `ERROR` — the test command timed out or could not run.
+- `ERROR` — the mutant could not be prepared, or the test command timed out or
+  could not run. The CLI includes the reason.
 
-TenantKiller never rewrites the target source tree. A passing baseline is
+TenantKiller never rewrites the target source tree. Symlinked Python files are
+skipped, and an explicitly selected symlink is rejected. A passing baseline is
 required before any mutant is tested.
 
 ## Install
@@ -84,6 +86,12 @@ Recognized roots are `tenant`, `organization`, `org`, and `company`, including
 - A non-zero mutant test run is classified as killed; flaky tests can inflate
   the score. Each run uses a fresh copy, but external databases and services
   are not isolated by TenantKiller.
+- Commands run with the temporary project and its `src/` directory first on
+  `PYTHONPATH`, so editable installs do not silently import the unmutated
+  checkout. On timeout, TenantKiller terminates the command's process group.
+- The supplied command can still use absolute paths or external services;
+  TenantKiller's no-write guarantee covers its own mutation preparation, not
+  arbitrary behavior inside a user-supplied test command.
 - The temporary copy excludes common VCS, virtual-environment, cache, build,
   and `node_modules` directories. Dependencies should already be installed in
   the environment that invokes TenantKiller.
@@ -96,4 +104,3 @@ before expanding the operator set.
 ```bash
 python -m unittest discover -s tests -v
 ```
-

@@ -95,6 +95,7 @@ def _run(args: argparse.Namespace) -> int:
                         "baseline": "timeout" if error.timed_out else "failed",
                         "returncode": error.returncode,
                         "output": error.output,
+                        "diagnostic": error.diagnostic,
                     },
                     indent=2,
                 )
@@ -121,6 +122,7 @@ def _run(args: argparse.Namespace) -> int:
                             **_mutation_dict(item.mutation),
                             "status": item.status.lower(),
                             "returncode": item.returncode,
+                            "diagnostic": item.diagnostic,
                         }
                         for item in report.results
                     ],
@@ -142,6 +144,10 @@ def _run(args: argparse.Namespace) -> int:
                 f"{item.status:<8} {item.mutation.identifier}  "
                 f"{item.mutation.location}  {item.mutation.description}"
             )
+            if item.diagnostic:
+                print(f"         {item.diagnostic}")
+            if item.status == "ERROR" and item.output:
+                print(f"         {item.output[-1000:].strip()}")
         print(
             f"\n{killed} killed, {survived} survived, {errors} error(s); "
             f"mutation score {score:.1f}%"
@@ -160,4 +166,3 @@ def main(argv: list[str] | None = None) -> int:
     except (FileNotFoundError, SyntaxError, ValueError, RuntimeError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 2
-
