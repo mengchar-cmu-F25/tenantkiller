@@ -22,7 +22,7 @@ required before any mutant is tested.
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-python -m pip install https://github.com/mengchar-cmu-F25/tenantkiller/releases/download/v0.1.0/tenantkiller-0.1.0-py3-none-any.whl
+python -m pip install https://github.com/mengchar-cmu-F25/tenantkiller/releases/download/v0.1.1/tenantkiller-0.1.1-py3-none-any.whl
 ```
 
 Python 3.11 or newer is required. There are no runtime dependencies, and
@@ -36,7 +36,7 @@ It creates an order for Tenant A and another for Tenant B. No database server,
 credentials, or external services are needed. Django is a demo-only dependency:
 
 ```bash
-git clone --branch v0.1.0 https://github.com/mengchar-cmu-F25/tenantkiller.git
+git clone --branch v0.1.1 https://github.com/mengchar-cmu-F25/tenantkiller.git
 cd tenantkiller
 python -m pip install "Django>=5.2,<5.3"
 tenantkiller list examples/django_tenants
