@@ -49,6 +49,16 @@ def _parser() -> argparse.ArgumentParser:
     )
     run_parser.add_argument("--json", action="store_true", help="emit machine-readable output")
     run_parser.add_argument(
+        "--select",
+        action="append",
+        default=[],
+        metavar="TK-ID",
+        help="run only this reviewed mutation ID; repeat to select multiple IDs",
+    )
+    run_parser.add_argument(
+        "--show-output", action="store_true", help="show full captured test output for each mutant"
+    )
+    run_parser.add_argument(
         "command",
         nargs=argparse.REMAINDER,
         help="test command after --, for example: -- python -m pytest -q",
@@ -77,6 +87,12 @@ def _run(args: argparse.Namespace) -> int:
     timeout = _validate_timeout(args.timeout)
 
     mutations = discover_mutations(args.target)
+    if args.select:
+        selected = set(args.select)
+        unknown = selected - {item.identifier for item in mutations}
+        if unknown:
+            raise ValueError(f"unknown mutation ID(s): {', '.join(sorted(unknown))}")
+        mutations = [item for item in mutations if item.identifier in selected]
     if not mutations:
         if args.json:
             print(json.dumps({"baseline": "not-run", "results": [], "summary": {"total": 0}}))
@@ -127,6 +143,7 @@ def _run(args: argparse.Namespace) -> int:
                             "status": item.status.lower(),
                             "returncode": item.returncode,
                             "diagnostic": item.diagnostic,
+                            "output": item.output,
                         }
                         for item in report.results
                     ],
@@ -150,7 +167,9 @@ def _run(args: argparse.Namespace) -> int:
             )
             if item.diagnostic:
                 print(f"         {item.diagnostic}")
-            if item.status == "ERROR" and item.output:
+            if args.show_output and item.output:
+                print(item.output, end="" if item.output.endswith("\n") else "\n")
+            elif item.status == "ERROR" and item.output:
                 print(f"         {item.output[-1000:].strip()}")
         print(
             f"\n{killed} killed, {survived} survived, {errors} error(s); "

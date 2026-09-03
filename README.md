@@ -8,7 +8,7 @@ Django-style `.filter()` and `.get()` calls. It removes one constraint at a
 time in a fresh temporary project copy, runs your test command, and reports the
 mutant as:
 
-- `KILLED` — the tests failed and caught the missing scope;
+- `KILLED` — the test command failed; inspect its output to confirm why;
 - `SURVIVED` — the tests still passed, exposing a tenant-isolation test gap;
 - `ERROR` — the mutant could not be prepared, or the test command timed out or
   could not run. The CLI includes the reason.
@@ -20,7 +20,9 @@ required before any mutant is tested.
 ## Install
 
 ```bash
-python -m pip install -e .
+git clone https://github.com/mengchar-cmu-F25/tenantkiller.git
+cd tenantkiller
+python -m pip install .
 ```
 
 Python 3.11 or newer is required. There are no runtime dependencies, and
@@ -55,8 +57,23 @@ Use the same shape in a real project (place run options before the target):
 tenantkiller run --json . -- python -m pytest tests/tenancy -q
 ```
 
-`--json` emits machine-readable output, and `--timeout SECONDS` changes the
-120-second per-run limit. Both must appear before the target path.
+Select only the production candidates you reviewed in `tenantkiller list`:
+
+```bash
+tenantkiller run --select TK-ID1 --select TK-ID2 --show-output . -- python -m pytest tests/tenancy -q
+```
+
+Replace `TK-ID1` and `TK-ID2` with IDs listed for the same target path. Repeated
+IDs run once; unknown IDs fail before the baseline runs. Run `list` again after
+editing source, because IDs include the source location. Omitting `--select`
+runs all discovered candidates, including any in test code.
+
+`--show-output` displays the full captured test output for each mutant; by
+default, text reports stay compact and only show an output excerpt for errors.
+`--json` always includes each mutant's captured combined stdout/stderr in
+`output`. Review test output for secrets before sharing a report.
+`--timeout SECONDS` changes the 120-second per-run limit. All run options must
+appear before the target path.
 
 Exit codes are `0` when every mutant is killed, `1` when at least one survives,
 and `2` for baseline or execution errors.
@@ -105,10 +122,11 @@ before expanding the operator set.
 - [Pinned django-organizations observation](validation/django-organizations/README.md)
   with fixed upstream and TenantKiller revisions
 - [Small real-repository corpus](validation/corpus/README.md), including the
-  negative evidence behind the current product hold
+  applicability limits that keep the product focused on explicit scope keywords
 
 ## Development
 
 ```bash
+python -m pip install -e .
 python -m unittest discover -s tests -v
 ```

@@ -1,12 +1,14 @@
 # TenantKiller: one-page product definition
 
-## Decision: HOLD
+## Decision: CONTINUE — focused usable alpha
 
-TenantKiller is a research prototype for one question: **if a Django query lost
+TenantKiller is a focused mutation-testing tool for one question: **if a Django query lost
 an explicit tenant or organization keyword, would a chosen test notice?** One
 manually inspected run produced the intended failure, but the first small
-corpus shows too little applicability and too much root-scan noise to justify
-more product code, new operators, packaging, or deployment.
+corpus also exposed root-scan noise and a narrow supported niche. Development
+continues within that niche: review candidates, select production IDs, run
+targeted tests, and inspect their actual output. Wider sample coverage informs
+the roadmap in parallel; it is not a prerequisite for shipping this workflow.
 
 ## Intended user and job
 
@@ -18,11 +20,13 @@ the application is tenant-safe.
 
 The minimal workflow is:
 
-1. Review syntactically discovered candidates.
-2. Remove one supported keyword in a temporary filesystem copy.
+1. Review syntactically discovered candidates with `tenantkiller list`.
+2. Select production IDs with repeated `--select TK-ID` options; remove one
+   supported keyword at a time in a temporary filesystem copy.
 3. Run a user-supplied test command after a passing baseline.
-4. Inspect the exact failure before calling a `KILLED` result causal; inspect
-   the source before calling a `SURVIVED` result a test gap.
+4. Inspect the exact failure with `--show-output` or JSON `output` before calling
+   a `KILLED` result causal; inspect the source before calling a `SURVIVED`
+   result a test gap.
 
 The temporary copy is not a sandbox. The test command can access the network,
 databases, services, absolute paths, and anything allowed to the invoking user.
@@ -63,18 +67,18 @@ Version 0.1 only recognizes tenant-like keyword arguments on method calls named
 queryset. It misses custom scope names, automatic managers, `Q` objects,
 positional predicates, SQL, middleware, tasks, caches, and database-enforced
 isolation. Any non-zero mutant command is labeled `KILLED`, including unrelated
-or flaky failures. Root scans also include test code, and the CLI cannot yet
-select an individual reviewed candidate.
+or flaky failures. Root scans also include test code; select reviewed production
+IDs to keep those mutations out of a run. Unknown IDs fail before the baseline.
 
-## Only justified next step
+## Next delivery steps
 
-Do not add code. Find five real applications in the intended niche and manually
-review the current operator's production candidates. Continue as a standalone
-project only if at least three applications contain repeated, genuinely
-tenant-isolating candidates and at least one maintainer says this workflow is
-preferable to a manual edit or existing mutation tooling. Otherwise stop the
-standalone product and retain this repository as a compact research artifact or
-contribute the operator to an established mutation tool.
+Ship the installable alpha with candidate selection, visible failure output,
+and tests showing that the original checkout is unchanged. Verify the same
+selected-candidate workflow on the pinned real example, then publish a concise
+demo so target users can try it. In parallel, find more shared-schema Django
+applications with explicit scope keywords and record both relevant candidates
+and unsupported patterns. Add an operator only when a concrete user example
+requires it; maintain the current narrow claims while collecting that evidence.
 
 ## Non-goals
 
