@@ -18,10 +18,9 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
-      - run: python -m pip install -e .
+      - run: python -m pip install -e . "Django>=5.2,<5.3"
       - run: python -m unittest discover -s tests -v
       - run: tenantkiller list examples/django_like
-      - run: python -m pip install "Django>=5.2,<5.3"
       - name: Weak Django test misses the removed scope
         run: |
           exit_code=0
