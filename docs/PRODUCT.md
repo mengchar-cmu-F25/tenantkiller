@@ -41,6 +41,12 @@ manual edit or a custom operator in an established mutation runner.
 
 ## Evidence
 
+The [bundled two-tenant demo](../README.md#try-it-two-real-django-tenants) uses
+real Django queries against in-memory SQLite. A weak own-tenant assertion
+passes after scope removal (`SURVIVED`); adding a cross-tenant exclusion
+assertion catches the same edit (`KILLED`). Both suites pass without mutation.
+This is a reproducible usability demo with synthetic data, not field validation.
+
 Using TenantKiller revision `3d4f20ee406685e03f85ecc6386893f9f0d12023`
 against `bennylope/django-organizations@f8953c4`, removing
 `organization=self` from a production `.get()` made the existing targeted test
@@ -72,10 +78,10 @@ IDs to keep those mutations out of a run. Unknown IDs fail before the baseline.
 
 ## Next delivery steps
 
-Ship the installable alpha with candidate selection, visible failure output,
-and tests showing that the original checkout is unchanged. Verify the same
-selected-candidate workflow on the pinned real example, then publish a concise
-demo so target users can try it. In parallel, find more shared-schema Django
+Publish the installable alpha with candidate selection, visible failure output,
+the runnable two-tenant demo, and tests showing that the original checkout is
+unchanged. The selected-candidate workflow also reproduces the pinned real
+example's expected failure. In parallel, find more shared-schema Django
 applications with explicit scope keywords and record both relevant candidates
 and unsupported patterns. Add an operator only when a concrete user example
 requires it; maintain the current narrow claims while collecting that evidence.

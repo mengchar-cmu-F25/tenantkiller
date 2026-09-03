@@ -21,6 +21,10 @@ classifiers = [
 ]
 dependencies = []
 
+[project.urls]
+Repository = "https://github.com/mengchar-cmu-F25/tenantkiller"
+Issues = "https://github.com/mengchar-cmu-F25/tenantkiller/issues"
+
 [project.scripts]
 tenantkiller = "tenantkiller.cli:main"
 

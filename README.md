@@ -20,36 +20,70 @@ required before any mutant is tested.
 ## Install
 
 ```bash
-git clone https://github.com/mengchar-cmu-F25/tenantkiller.git
-cd tenantkiller
-python -m pip install .
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install https://github.com/mengchar-cmu-F25/tenantkiller/releases/download/v0.1.0/tenantkiller-0.1.0-py3-none-any.whl
 ```
 
 Python 3.11 or newer is required. There are no runtime dependencies, and
-Django itself is not required for discovery.
+Django itself is not required for discovery. On Windows, activate the virtual
+environment with `.venv\Scripts\activate` instead.
 
-## Quickstart
+## Try it: two real Django tenants
 
-List mutations without running tests or changing files:
-
-```bash
-tenantkiller list examples/django_like
-```
-
-Run the bundled dependency-free example:
+This bundled demo uses Django's real ORM and an in-memory SQLite database.
+It creates an order for Tenant A and another for Tenant B. No database server,
+credentials, or external services are needed. Django is a demo-only dependency:
 
 ```bash
-tenantkiller run examples/django_like -- python -m unittest discover -q
+git clone --branch v0.1.0 https://github.com/mengchar-cmu-F25/tenantkiller.git
+cd tenantkiller
+python -m pip install "Django>=5.2,<5.3"
+tenantkiller list examples/django_tenants
 ```
 
-Expected result:
+The scan lists one reviewed production candidate:
 
 ```text
-Baseline passed (...s).
-KILLED   TK-...  app.py:9:27  remove tenant_id= from .filter()
-
-1 killed, 0 survived, 0 error(s); mutation score 100.0%
+TK-8106FC62D1  app.py:23:33  remove tenant_id= from .filter()
 ```
+
+First run the weak test: it only checks that Tenant A's order appears. The
+test still passes if Tenant B's order leaks into the result:
+
+```bash
+tenantkiller run --select TK-8106FC62D1 examples/django_tenants -- python -m unittest -q checks.WeakIsolationTest
+```
+
+Expected: `Baseline passed`, **1 survived**, mutation score `0.0%`, exit code
+`1`. That exit code is intentional: the test missed the removed scope.
+
+The strong suite keeps that test and adds the missing cross-tenant assertion:
+
+```python
+self.assertNotIn("Tenant B order", visible_orders(1).values_list("name", flat=True))
+```
+
+Run it against the same mutation and inspect the actual failure:
+
+```bash
+tenantkiller run --select TK-8106FC62D1 --show-output examples/django_tenants -- python -m unittest -q checks.StrongIsolationTest
+```
+
+Expected: `Baseline passed`, **1 killed**, mutation score `100.0%`, exit code
+`0`. The captured test failure includes:
+
+```text
+AssertionError: 'Tenant B order' unexpectedly found in <QuerySet ['Tenant A order', 'Tenant B order']>
+```
+
+Both suites pass on the original query. Only the strong suite catches the
+mutated query, and neither run changes the original example files. These are
+small, synthetic test records, not evidence that a production application is
+tenant-safe. The example source is included in the repository and source
+distribution under the repository's MIT license.
+
+## Use your own tests
 
 Use the same shape in a real project (place run options before the target):
 
@@ -125,6 +159,8 @@ before expanding the operator set.
   applicability limits that keep the product focused on explicit scope keywords
 
 ## Development
+
+From a source checkout:
 
 ```bash
 python -m pip install -e .
