@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=69"]
+requires = ["setuptools>=77.0.3"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -20,6 +20,10 @@ classifiers = [
   "Topic :: Security",
 ]
 dependencies = []
+
+[project.urls]
+Repository = "https://github.com/mengchar-cmu-F25/tenantkiller"
+Issues = "https://github.com/mengchar-cmu-F25/tenantkiller/issues"
 
 [project.scripts]
 tenantkiller = "tenantkiller.cli:main"
