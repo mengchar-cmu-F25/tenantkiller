@@ -91,6 +91,13 @@ Use the same shape in a real project (place run options before the target):
 tenantkiller run --json . -- python -m pytest tests/tenancy -q
 ```
 
+Project-relative environment executables also work even though virtual
+environment directories are not copied into mutant workspaces:
+
+```bash
+tenantkiller run . -- .venv/bin/python -m pytest tests/tenancy -q
+```
+
 Select only the production candidates you reviewed in `tenantkiller list`:
 
 ```bash

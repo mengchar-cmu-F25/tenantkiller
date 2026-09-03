@@ -4,6 +4,8 @@ import sys
 import tempfile
 import time
 import unittest
+import venv
+from contextlib import chdir
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
@@ -74,6 +76,33 @@ result = records.filter(
 
 
 class RunnerTests(unittest.TestCase):
+    def test_runs_with_project_relative_virtualenv_interpreter(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "app.py").write_text(
+                "result = records.filter(tenant_id=7)\n",
+                encoding="utf-8",
+            )
+            venv.create(root / ".venv", with_pip=False)
+            interpreter = (
+                Path(".venv/Scripts/python.exe")
+                if sys.platform == "win32"
+                else Path(".venv/bin/python")
+            )
+            assertion = (
+                "from pathlib import Path; "
+                "raise SystemExit(0 if 'tenant_id=7' in Path('app.py').read_text() else 1)"
+            )
+
+            with chdir(root):
+                report = run_mutations(
+                    ".",
+                    [str(interpreter), "-c", assertion],
+                    timeout=15,
+                )
+
+            self.assertEqual(report.results[0].status, "KILLED")
+
     def test_rejects_invalid_timeout_values(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             for timeout in (True, False, 0, -1, float("nan"), float("inf"), float("-inf"), "1"):

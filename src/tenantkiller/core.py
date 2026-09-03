@@ -470,6 +470,16 @@ def run_mutations(
         raise ValueError("test command cannot be empty")
     timeout = _validate_timeout(timeout)
     root, _ = _project_root_and_files(Path(target))
+    prepared_command = list(command)
+    executable = Path(prepared_command[0])
+    if (
+        not executable.is_absolute()
+        and ".." not in executable.parts
+        and any(part in _IGNORED_DIRS for part in executable.parts[:-1])
+    ):
+        original_executable = root / executable
+        if original_executable.is_file():
+            prepared_command[0] = str(original_executable)
     discovered = discover_mutations(target)
     if mutations is None:
         selected = discovered
@@ -486,7 +496,7 @@ def run_mutations(
     if not selected:
         return RunReport(0.0, ())
 
-    baseline = _run_in_copy(root, command, timeout)
+    baseline = _run_in_copy(root, prepared_command, timeout)
     if baseline.diagnostic or baseline.timed_out or baseline.returncode != 0:
         raise BaselineFailed(
             baseline.returncode,
@@ -497,7 +507,7 @@ def run_mutations(
 
     results = []
     for mutation in selected:
-        execution = _run_in_copy(root, command, timeout, mutation)
+        execution = _run_in_copy(root, prepared_command, timeout, mutation)
         if execution.diagnostic or execution.timed_out or execution.returncode is None:
             status = "ERROR"
         elif execution.returncode == 0:
