@@ -160,9 +160,12 @@ before expanding the operator set.
 
 ## Development
 
+The [synthetic Django scenarios](examples/django_scenarios/README.md) cover
+business filters and cross-tenant primary-key lookups without external data or services.
+
 From a source checkout:
 
 ```bash
-python -m pip install -e .
+python -m pip install -e . "Django>=5.2,<5.3"
 python -m unittest discover -s tests -v
 ```
