@@ -1,2 +1,3 @@
 recursive-include examples *.py *.md
-recursive-include docs validation *.md *.json
+recursive-include docs *.md
+recursive-include validation *.md *.json
