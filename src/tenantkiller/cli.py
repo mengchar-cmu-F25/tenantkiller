@@ -10,6 +10,7 @@ from pathlib import Path
 from .core import (
     BaselineFailed,
     Mutation,
+    _validate_failure_exit_codes,
     _validate_timeout,
     discover_mutations,
     run_mutations,
@@ -41,6 +42,11 @@ def _parser() -> argparse.ArgumentParser:
 
     run_parser = subparsers.add_parser("run", help="run each mutant in an isolated temporary copy")
     run_parser.add_argument("target", type=Path, help="Python file or project directory")
+    for subparser in (list_parser, run_parser):
+        subparser.add_argument(
+            "--source", action="append", metavar="PATH",
+            help="scan only this project-relative Python file or directory; repeat for multiple paths",
+        )
     run_parser.add_argument(
         "--timeout",
         type=float,
@@ -48,6 +54,10 @@ def _parser() -> argparse.ArgumentParser:
         help="seconds allowed per test run (default: 120)",
     )
     run_parser.add_argument("--json", action="store_true", help="emit machine-readable output")
+    run_parser.add_argument(
+        "--failure-exit-code", action="append", type=int, metavar="N",
+        help="test-failure exit code; repeat for multiple codes (replaces default: 1)",
+    )
     run_parser.add_argument(
         "--select",
         action="append",
@@ -67,13 +77,15 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _list(args: argparse.Namespace) -> int:
-    mutations = discover_mutations(args.target)
+    mutations = discover_mutations(args.target, sources=args.source)
     if args.json:
         print(json.dumps([_mutation_dict(item) for item in mutations], indent=2))
     else:
         for mutation in mutations:
             print(f"{mutation.identifier}  {mutation.location}  {mutation.description}")
         print(f"\n{len(mutations)} mutant(s) found; no files changed.")
+        if not mutations:
+            print("Zero candidates provide no security assurance.")
     return 0
 
 
@@ -85,8 +97,10 @@ def _run(args: argparse.Namespace) -> int:
         print("error: provide a test command after --", file=sys.stderr)
         return 2
     timeout = _validate_timeout(args.timeout)
+    failure_codes = args.failure_exit_code if args.failure_exit_code is not None else [1]
+    _validate_failure_exit_codes(failure_codes)
 
-    mutations = discover_mutations(args.target)
+    mutations = discover_mutations(args.target, sources=args.source)
     if args.select:
         selected = set(args.select)
         unknown = selected - {item.identifier for item in mutations}
@@ -94,10 +108,13 @@ def _run(args: argparse.Namespace) -> int:
             raise ValueError(f"unknown mutation ID(s): {', '.join(sorted(unknown))}")
         mutations = [item for item in mutations if item.identifier in selected]
     if not mutations:
+        message = "No supported tenant-scope mutations found; tests were not run. No security assurance."
         if args.json:
-            print(json.dumps({"baseline": "not-run", "results": [], "summary": {"total": 0}}))
+            print(json.dumps({
+                "baseline": "not-run", "results": [], "summary": {"total": 0}, "message": message,
+            }))
         else:
-            print("No supported tenant-scope mutations found; tests were not run.")
+            print(message)
         return 0
 
     try:
@@ -106,6 +123,8 @@ def _run(args: argparse.Namespace) -> int:
             command,
             timeout=timeout,
             mutations=mutations,
+            sources=args.source,
+            failure_exit_codes=failure_codes,
         )
     except BaselineFailed as error:
         if args.json:
@@ -130,7 +149,7 @@ def _run(args: argparse.Namespace) -> int:
     survived = sum(item.status == "SURVIVED" for item in report.results)
     errors = sum(item.status == "ERROR" for item in report.results)
     total = len(report.results)
-    score = killed / total * 100 if total else 0.0
+    score = round(killed / total * 100, 1) if total and not errors else None
 
     if args.json:
         print(
@@ -152,7 +171,8 @@ def _run(args: argparse.Namespace) -> int:
                         "killed": killed,
                         "survived": survived,
                         "errors": errors,
-                        "mutation_score": round(score, 1),
+                        "complete": not errors,
+                        "mutation_score": score,
                     },
                 },
                 indent=2,
@@ -171,10 +191,13 @@ def _run(args: argparse.Namespace) -> int:
                 print(item.output, end="" if item.output.endswith("\n") else "\n")
             elif item.status == "ERROR" and item.output:
                 print(f"         {item.output[-1000:].strip()}")
+        score_text = f"mutation score {score:.1f}%" if score is not None else "incomplete; mutation score unavailable"
         print(
             f"\n{killed} killed, {survived} survived, {errors} error(s); "
-            f"mutation score {score:.1f}%"
+            f"{score_text}"
         )
+        if survived:
+            print("Review each survivor: possible test gap, redundant safeguard, or unexecuted path.")
 
     if errors:
         return 2
@@ -186,6 +209,6 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return _list(args) if args.subcommand == "list" else _run(args)
-    except (FileNotFoundError, SyntaxError, ValueError, RuntimeError) as error:
+    except (OSError, SyntaxError, ValueError, RuntimeError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 2

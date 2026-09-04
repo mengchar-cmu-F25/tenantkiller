@@ -9,6 +9,8 @@ corpus also exposed root-scan noise and a narrow supported niche. Development
 continues within that niche: review candidates, select production IDs, run
 targeted tests, and inspect their actual output. Wider sample coverage informs
 the roadmap in parallel; it is not a prerequisite for shipping this workflow.
+This decision supersedes the corpus's historical HOLD/STOP shipping gate; its
+pinned observations and limitations remain valid evidence.
 
 ## Intended user and job
 
@@ -20,13 +22,15 @@ the application is tenant-safe.
 
 The minimal workflow is:
 
-1. Review syntactically discovered candidates with `tenantkiller list`.
+1. Keep the target at the project root; use repeatable `--source` paths to
+   constrain production-code discovery, then review `tenantkiller list`.
 2. Select production IDs with repeated `--select TK-ID` options; remove one
    supported keyword at a time in a temporary filesystem copy.
 3. Run a user-supplied test command after a passing baseline.
 4. Inspect the exact failure with `--show-output` or JSON `output` before calling
    a `KILLED` result causal; inspect the source before calling a `SURVIVED`
-   result a test gap.
+   result a test gap. A survivor may instead reflect a redundant safeguard or
+   an unexecuted path; zero candidates provide no security assurance.
 
 The temporary copy is not a sandbox. The test command can access the network,
 databases, services, absolute paths, and anything allowed to the invoking user.
@@ -72,16 +76,20 @@ Version 0.1 only recognizes tenant-like keyword arguments on method calls named
 `.filter()` and `.get()`. It does not establish that the receiver is a Django
 queryset. It misses custom scope names, automatic managers, `Q` objects,
 positional predicates, SQL, middleware, tasks, caches, and database-enforced
-isolation. Any non-zero mutant command is labeled `KILLED`, including unrelated
-or flaky failures. Root scans also include test code; select reviewed production
-IDs to keep those mutations out of a run. Unknown IDs fail before the baseline.
+isolation. Only declared test-failure codes (default `1`) produce `KILLED`;
+other nonzero exits, signals, and execution failures produce `ERROR` and an
+incomplete score. A declared failure can still be unrelated or flaky, so inspect
+the output. Root scans include test code unless limited with `--source`; use
+the same source scope for discovery and execution, then select reviewed IDs.
+Unknown or out-of-scope IDs fail before the baseline.
 
 ## Next delivery steps
 
-Publish the installable alpha with candidate selection, visible failure output,
-the runnable two-tenant demo, and tests showing that the original checkout is
-unchanged. The selected-candidate workflow also reproduces the pinned real
-example's expected failure. In parallel, find more shared-schema Django
+Maintain the installable alpha with candidate selection, bounded source scans,
+explicit exit-code handling, visible failure output, and the runnable two-tenant
+demo. Regression tests use temporary synthetic projects and preserve the
+original checkout; they are not new real-user validation. In parallel, find
+more shared-schema Django
 applications with explicit scope keywords and record both relevant candidates
 and unsupported patterns. Add an operator only when a concrete user example
 requires it; maintain the current narrow claims while collecting that evidence.

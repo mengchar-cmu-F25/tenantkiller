@@ -1,8 +1,13 @@
 # Small real-repository corpus
 
-## Result
+## Historical result and current decision
 
-**Product HOLD; feature development STOP.** One manually inspected edit caused
+**Historical decision: Product HOLD; feature development STOP — superseded.**
+The current [focused-alpha CONTINUE decision](../../docs/PRODUCT.md) replaces
+that shipping gate. The observations below remain pinned to the original
+revision and have not been rerun or reclassified by the current release.
+
+One manually inspected edit caused
 the intended targeted-test failure, but this four-repository sample does not
 support a standalone product claim. Two relevant scoping libraries are outside
 the operator model, and three of the four discovered candidates are test-only.
@@ -93,11 +98,18 @@ A pinned commit is not trusted code. Dependency installation and test execution
 can run arbitrary third-party code and should happen in a disposable VM or
 container. TenantKiller's temporary copy is not a security sandbox.
 
-## Decision rule
+## Historical decision rule (superseded)
 
-Do not broaden the operator or build infrastructure. First inspect five real
-applications that manually repeat supported tenant predicates. Resume product
-work only if at least three contain multiple genuine production candidates and
-at least one maintainer prefers this workflow to a manual edit or an existing
-mutation runner. If not, keep the repository as research evidence or move the
-operator into an established tool.
+The following was the original gate, not a current prerequisite for shipping
+the focused alpha:
+
+> Do not broaden the operator or build infrastructure. First inspect five real
+> applications that manually repeat supported tenant predicates. Resume product
+> work only if at least three contain multiple genuine production candidates and
+> at least one maintainer prefers this workflow to a manual edit or an existing
+> mutation runner. If not, keep the repository as research evidence or move the
+> operator into an established tool.
+
+Continue collecting applicability evidence without claiming broad coverage or
+requiring a sample-count or maintainer-preference gate for usability fixes.
+Operator expansion still requires a concrete user example.

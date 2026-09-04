@@ -126,6 +126,12 @@ def _validate_timeout(timeout: float) -> float:
     return float(timeout)
 
 
+def _validate_failure_exit_codes(codes: Sequence[int]) -> set[int]:
+    if not codes or any(type(code) is not int or code <= 0 for code in codes):
+        raise ValueError("failure exit codes must be a non-empty sequence of positive integers")
+    return set(codes)
+
+
 def _scope_keyword(name: str | None) -> bool:
     if not name:
         return False
@@ -135,7 +141,9 @@ def _scope_keyword(name: str | None) -> bool:
     return root in _SCOPE_ROOTS
 
 
-def _project_root_and_files(target: Path) -> tuple[Path, list[Path]]:
+def _project_root_and_files(
+    target: Path, sources: Sequence[str | Path] | None = None
+) -> tuple[Path, list[Path]]:
     target = target.expanduser()
     if target.is_symlink():
         raise ValueError(f"symlink targets are not supported: {target}")
@@ -143,17 +151,46 @@ def _project_root_and_files(target: Path) -> tuple[Path, list[Path]]:
     if not target.exists():
         raise FileNotFoundError(target)
     if target.is_file():
+        if sources is not None:
+            raise ValueError("source paths require a project directory target")
         if target.suffix != ".py":
             raise ValueError(f"target file must end in .py: {target}")
         return target.parent, [target]
 
-    files = []
-    for path in target.rglob("*.py"):
-        relative_parts = path.relative_to(target).parts[:-1]
-        if not any(part in _IGNORED_DIRS for part in relative_parts) and not _has_symlink_component(
-            target, path
-        ):
-            files.append(path)
+    if sources is not None and not sources:
+        raise ValueError("source paths cannot be empty")
+    scan_roots = []
+    for source in sources if sources is not None else [Path(".")]:
+        relative = Path(source)
+        if relative.is_absolute() or ".." in relative.parts:
+            raise ValueError(f"source path must be relative and inside project root: {source}")
+        candidate = target / relative
+        if _has_symlink_component(target, candidate):
+            raise ValueError(f"source path contains a symlink: {source}")
+        candidate = candidate.resolve(strict=True)
+        if not candidate.is_relative_to(target):
+            raise ValueError(f"source path escapes project root: {source}")
+        if any(part in _IGNORED_DIRS for part in relative.parts):
+            raise ValueError(f"source path is in an ignored directory: {source}")
+        if not candidate.is_dir() and not (candidate.is_file() and candidate.suffix == ".py"):
+            raise ValueError(f"source must be a Python file or directory: {source}")
+        scan_roots.append(candidate)
+
+    # Validate every requested path before scanning; never traverse linked directories.
+    files = set()
+    pending = scan_roots
+    while pending:
+        path = pending.pop()
+        if path.is_file():
+            files.add(path)
+            continue
+        for child in path.iterdir():
+            if child.is_symlink() or child.name in _IGNORED_DIRS:
+                continue
+            if child.is_dir():
+                pending.append(child)
+            elif child.is_file() and child.suffix == ".py":
+                files.add(child)
     return target, sorted(files)
 
 
@@ -258,10 +295,12 @@ def _removal_span(
     return None
 
 
-def discover_mutations(target: str | Path) -> list[Mutation]:
-    """Find removable tenant/org/company kwargs in ``filter`` and ``get`` calls."""
+def discover_mutations(
+    target: str | Path, *, sources: Sequence[str | Path] | None = None
+) -> list[Mutation]:
+    """Find scope kwargs, optionally scanning only project-relative source paths."""
 
-    root, files = _project_root_and_files(Path(target))
+    root, files = _project_root_and_files(Path(target), sources)
     mutations: list[Mutation] = []
 
     for path in files:
@@ -463,13 +502,16 @@ def run_mutations(
     *,
     timeout: float = 120.0,
     mutations: Sequence[Mutation] | None = None,
+    sources: Sequence[str | Path] | None = None,
+    failure_exit_codes: Sequence[int] = (1,),
 ) -> RunReport:
-    """Run a passing baseline and then each mutant in a fresh temporary copy."""
+    """Copy the full project; only declared test-failure exit codes kill mutants."""
 
     if not command:
         raise ValueError("test command cannot be empty")
     timeout = _validate_timeout(timeout)
-    root, _ = _project_root_and_files(Path(target))
+    failure_codes = _validate_failure_exit_codes(failure_exit_codes)
+    root, _ = _project_root_and_files(Path(target), sources)
     prepared_command = list(command)
     executable = Path(prepared_command[0])
     if (
@@ -480,7 +522,7 @@ def run_mutations(
         original_executable = root / executable
         if original_executable.is_file():
             prepared_command[0] = str(original_executable)
-    discovered = discover_mutations(target)
+    discovered = discover_mutations(target, sources=sources)
     if mutations is None:
         selected = discovered
     else:
@@ -508,19 +550,27 @@ def run_mutations(
     results = []
     for mutation in selected:
         execution = _run_in_copy(root, prepared_command, timeout, mutation)
+        diagnostic = execution.diagnostic
         if execution.diagnostic or execution.timed_out or execution.returncode is None:
             status = "ERROR"
         elif execution.returncode == 0:
             status = "SURVIVED"
-        else:
+        elif execution.returncode in failure_codes:
             status = "KILLED"
+        else:
+            status = "ERROR"
+            diagnostic = (
+                f"test command terminated by signal {-execution.returncode}"
+                if execution.returncode < 0
+                else f"test command exited with {execution.returncode}; not a declared test-failure code"
+            )
         results.append(
             MutationResult(
                 mutation=mutation,
                 status=status,
                 returncode=execution.returncode,
                 output=execution.output,
-                diagnostic=execution.diagnostic,
+                diagnostic=diagnostic,
             )
         )
     return RunReport(baseline.seconds, tuple(results))

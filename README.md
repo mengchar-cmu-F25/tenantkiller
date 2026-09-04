@@ -8,10 +8,13 @@ Django-style `.filter()` and `.get()` calls. It removes one constraint at a
 time in a fresh temporary project copy, runs your test command, and reports the
 mutant as:
 
-- `KILLED` — the test command failed; inspect its output to confirm why;
-- `SURVIVED` — the tests still passed, exposing a tenant-isolation test gap;
+- `KILLED` — the command returned a declared test-failure code (default: `1`);
+  inspect its output to confirm why;
+- `SURVIVED` — the command returned `0`; review for a test gap, a redundant
+  safeguard, or an unexecuted path, rather than assuming an isolation defect;
 - `ERROR` — the mutant could not be prepared, or the test command timed out or
-  could not run. The CLI includes the reason.
+  could not run, was terminated by a signal, or returned an unexpected exit code.
+  The CLI includes the reason; an error makes the score incomplete.
 
 TenantKiller never rewrites the target source tree. Symlinked Python files are
 skipped, and an explicitly selected symlink is rejected. A passing baseline is
@@ -22,7 +25,7 @@ required before any mutant is tested.
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-python -m pip install https://github.com/mengchar-cmu-F25/tenantkiller/releases/download/v0.1.1/tenantkiller-0.1.1-py3-none-any.whl
+python -m pip install https://github.com/mengchar-cmu-F25/tenantkiller/releases/download/v0.1.2/tenantkiller-0.1.2-py3-none-any.whl
 ```
 
 Python 3.11 or newer is required. There are no runtime dependencies, and
@@ -36,7 +39,7 @@ It creates an order for Tenant A and another for Tenant B. No database server,
 credentials, or external services are needed. Django is a demo-only dependency:
 
 ```bash
-git clone --branch v0.1.1 https://github.com/mengchar-cmu-F25/tenantkiller.git
+git clone --branch v0.1.2 https://github.com/mengchar-cmu-F25/tenantkiller.git
 cd tenantkiller
 python -m pip install "Django>=5.2,<5.3"
 tenantkiller list examples/django_tenants
@@ -91,6 +94,23 @@ Use the same shape in a real project (place run options before the target):
 tenantkiller run --json . -- python -m pytest tests/tenancy -q
 ```
 
+Keep the target as the project root when tests need root-level configuration or
+fixtures. Use repeatable `--source` paths to scan only production code:
+
+```bash
+tenantkiller list --source app/services --source shared/queries.py .
+tenantkiller run --source app/services --source shared/queries.py --json . -- python -m pytest tests/tenancy -q
+```
+
+Source paths are relative to the target directory. Absolute paths, `..`,
+symlinks, and ignored environment/build directories are rejected. Linked files
+and directories encountered within a scan are skipped. Overlapping paths do
+not duplicate candidates. Unselected Python templates are not parsed, but a
+syntax error inside the selected scope remains an error. The full project is
+still copied and the command runs at its root; `--source` limits discovery,
+not command access. Without it, discovery retains the existing whole-target
+behavior. A file target still uses that file's parent as the execution root.
+
 Project-relative environment executables also work even though virtual
 environment directories are not copied into mutant workspaces:
 
@@ -104,10 +124,11 @@ Select only the production candidates you reviewed in `tenantkiller list`:
 tenantkiller run --select TK-ID1 --select TK-ID2 --show-output . -- python -m pytest tests/tenancy -q
 ```
 
-Replace `TK-ID1` and `TK-ID2` with IDs listed for the same target path. Repeated
-IDs run once; unknown IDs fail before the baseline runs. Run `list` again after
+Replace `TK-ID1` and `TK-ID2` with IDs listed for the same target and source scope.
+Use the same `--source` options on `list` and `run`; IDs remain project-relative.
+Repeated IDs run once; unknown IDs fail before the baseline runs. Run `list` again after
 editing source, because IDs include the source location. Omitting `--select`
-runs all discovered candidates, including any in test code.
+runs all candidates in the scan scope, including any test code within it.
 
 `--show-output` displays the full captured test output for each mutant; by
 default, text reports stay compact and only show an output excerpt for errors.
@@ -117,7 +138,39 @@ default, text reports stay compact and only show an output excerpt for errors.
 appear before the target path.
 
 Exit codes are `0` when every mutant is killed, `1` when at least one survives,
-and `2` for baseline or execution errors.
+and `2` for baseline or execution errors (even if other mutants were killed).
+Zero candidates also returns `0`, but tests are not run and this provides no
+security assurance.
+
+### Test-command exit contract
+
+The baseline must return `0`. For each mutant, `0` means `SURVIVED`, `1` means
+`KILLED`, and other exit codes mean `ERROR` by default. This matches
+[pytest's exit codes](https://docs.pytest.org/en/stable/reference/exit-codes.html):
+2 (interruption), 3 (internal error), 4 (usage error), 5 (no tests), and 6
+(warning limit) are not mutation kills. Signal termination, preparation errors,
+startup errors, and timeouts are always `ERROR`.
+
+TenantKiller does not guess a wrapper's semantics from its executable name. If
+your wrapper uses a different code specifically for test failures, declare it:
+
+```bash
+tenantkiller run --failure-exit-code 7 --failure-exit-code 9 . -- ./test-wrapper
+```
+
+Explicit codes replace the default `1`; only positive integers are accepted.
+Do not designate runner errors as test failures. A wrapper that collapses
+errors and assertion failures into one code cannot be distinguished by this
+contract. Likewise, `unittest` may return `0` with no tests: verify that the
+supplied command actually executes the intended assertions.
+
+For nonempty runs, JSON `summary.complete` is false if any mutant has `ERROR`,
+and `summary.mutation_score` is then `null`; text reports say the score is
+unavailable. Otherwise the score remains numeric. Each result keeps its actual
+`returncode` and captured `output`. This corrects v0.1.1's classification of
+all nonzero exits as kills; JSON consumers must accept `null` for incomplete
+runs. Python API equivalents are `sources=["app/services"]` on discovery and
+execution, and `failure_exit_codes=(7, 9)` on `run_mutations`.
 
 ## Mutation operator in v0.1
 
@@ -141,9 +194,11 @@ Recognized roots are `tenant`, `organization`, `org`, and `company`, including
   Django queryset, so review `tenantkiller list` before a large run.
 - It does not cover `exclude`, `Q` objects, positional predicates, managers,
   middleware, Celery, caches, storage paths, or frontend code.
-- A non-zero mutant test run is classified as killed; flaky tests can inflate
-  the score. Each run uses a fresh copy, but external databases and services
-  are not isolated by TenantKiller.
+- A declared test-failure code is not proof of causality: unrelated or flaky
+  failures can inflate the score. Each run uses a fresh copy, but external
+  databases and services are not isolated by TenantKiller.
+- Removing one of two equivalent tenant filters may leave correct isolation
+  intact and yield `SURVIVED`. TenantKiller does not prove mutant equivalence.
 - Commands run with the temporary project and its `src/` directory first on
   `PYTHONPATH`, so editable installs do not silently import the unmutated
   checkout. On timeout, TenantKiller terminates the command's process group.
@@ -173,6 +228,6 @@ business filters and cross-tenant primary-key lookups without external data or s
 From a source checkout:
 
 ```bash
-python -m pip install -e . "Django>=5.2,<5.3"
+python -m pip install -e . "Django>=5.2,<5.3" "pytest>=8,<10"
 python -m unittest discover -s tests -v
 ```
